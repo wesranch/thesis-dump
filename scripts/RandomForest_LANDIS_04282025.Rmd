@@ -9,6 +9,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 dir <- "F:/randomForest_Landis/"
+dir <- "/Users/wancher/Documents/thesis/data/analysis/"
 setwd(dir)
 ```
 
@@ -17,8 +18,8 @@ Read in training dataset and rasters to make predictions on
 ```{r}
 library(dplyr)
 #Training Dataframe was prepared in (../scripts/DataPreparation.Rmd)
-training_df <- read.csv("data/analysis/main_predictor_data.csv") 
-#training_df <- read.csv("output/main_predictor_data.csv")
+#training_df <- read.csv("data/analysis/main_predictor_data_05272025.csv") 
+training_df <- read.csv("main_predictor_data_05272025.csv")
 ```
 
 Define some functions to make predictions and plot these estimates against our validation set. I'm using gsub and  strsplit to grab unique identifiers from file names so I can store them in a dataframe for later plotting. This requires a final fit from a model workflow. These functions are nested in the model training function.
@@ -98,9 +99,9 @@ train_model <- function(df, species, response="ag_carbon") {
   formula <- as.formula(paste(response, "~", paste(predictors, collapse = "+")))
   
   #tidy models recipe (swapping in entire dataset)
-  recipe <- recipe(formula = formula, data = training_df_one_spp) #%>% 
+  recipe <- recipe(formula = formula, data = training_df_one_spp) %>% 
     #step_nzv(all_predictors()) %>%
-    #step_corr(all_numeric_predictors(), threshold = 0.80, use = "pairwise.complete.obs", method = "pearson")
+    step_corr(all_numeric_predictors(), threshold = 0.80, use = "pairwise.complete.obs", method = "pearson")
   
   #define models to run (nts: cite packages)
   #use additional script to set up cforest to be tidymodels friendly
@@ -215,8 +216,8 @@ environmental_fit_data <- do.call(rbind, lapply(model_output[1:4], function(x) x
 
 #write.csv(predictions, "F:/jetstream/data/PredictedCarbon_RasterValues_04252025.csv", row.names = FALSE)
 #write.csv(varImp_all_spp, "F:/jetstream/data/VariableImportance_LANDIS_04282025.csv", row.names = FALSE)
-write.csv(proximity_data, "data/analysis/MDS_Data_LANDIS_04292025.csv", row.names = FALSE)
-write.csv(environmental_fit_data, "data/analysis/EnvFit_Data_LANDIS_04292025.csv", row.names = FALSE)
+#write.csv(proximity_data, "data/analysis/MDS_Data_LANDIS_04292025.csv", row.names = FALSE)
+#write.csv(environmental_fit_data, "data/analysis/EnvFit_Data_LANDIS_04292025.csv", row.names = FALSE)
 
 ```
 

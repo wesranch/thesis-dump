@@ -106,92 +106,85 @@ RUN chmod +x /bin/LANDIS_Linux/Core-Model-v8-LINUX/downloadSpecificGitCommitAndF
 
 #GIPL
 RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
-&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Library-GIPL.git master /src \
+&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Library-GIPL.git ab2e9cf416eef11c2b71f38ae80746a3bcd5a933 /src \
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Library-GIPL/src \
-#&& sed -i -e 's/lib\\Landis.Library/..\\..\\Support-Library-Dlls-v8-master\\Landis.Library/g' GiplDamm.csproj \
 && python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./GiplDamm.csproj \
 && dotnet build -c Release GiplDamm.csproj \
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Library-GIPL
 
+#dont tell me
+#sed -i -e 's/lib\\Landis.Library/..\\..\\Support-Library-Dlls-v8-master\\Landis.Library/g' GiplDamm.csproj
+
 #SHAW
 RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
-&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Library-Shaw.git master /src \
+&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Library-Shaw.git 597443b12737076b2129e76d8933f5a50ce13861 /src \
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Library-Shaw/src \
-#&& sed -i -e 's/lib\\Landis.Library/..\\..\\Support-Library-Dlls-v8-master\\Landis.Library/g' ShawDammNewInputs.csproj \
 && python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./ShawDammNewInputs.csproj \
 && dotnet build -c Release ShawDammNewInputs.csproj \
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Library-Shaw
 
+#sed -i -e 's/lib\\Landis.Library/..\\..\\Support-Library-Dlls-v8-master\\Landis.Library/g' ShawDammNewInputs.csproj
+
 # # DGS Succession extension
 RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
-# just grab the latest for v8
-&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-DGS-Succession.git v8 /src \ 
+#commit dde267702c587c10d04951f4c4ea754ebeb67bfa is the latest, using light est. curves and species csv
+&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-DGS-Succession.git dde267702c587c10d04951f4c4ea754ebeb67bfa /src \ 
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-DGS-Succession/src \
 && python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./DGS-succession.csproj \
-&& sed -i 's|<HintPath>.*</HintPath>|<HintPath>..\\..\\build\\extensions\\Landis.Library.UniversalCohorts-v1.dll</HintPath>|' DGS-succession.csproj \
 && dotnet build -c Release \
-&& wget -O DGS_Succession_2.4.txt https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-DGS-Succession/v8/deploy/installer/DGS_Succession%202.4.txt \
+&& wget -O DGS_Succession_2.4.txt https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-DGS-Succession/dde267702c587c10d04951f4c4ea754ebeb67bfa/deploy/installer/DGS_Succession%202.4.txt \
 && dotnet $LANDIS_EXTENSIONS_TOOL add "DGS_Succession_2.4.txt" \
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Extension-DGS-Succession 
 
-# RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
-# && wget https://github.com/LANDIS-II-Foundation/Extension-DGS-Succession/archive/refs/heads/v8.zip \
-# && unzip v8.zip -d /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/ \
-# && rm v8.zip \
-# && mv /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/Extension-DGS-Succession-8/ /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/Extension-DGS-Succession/ \
-# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/Extension-DGS-Succession/src; sed -i -e 's/lib\\Landis.Library/..\\..\\Support-Library-Dlls-v8-master\\Landis.Library/g' DGS-succession.csproj \
-# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/Extension-DGS-Succession/src; dotnet build -c Release DGS-succession.csproj \
-# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/Extension-DGS-Succession/deploy/installer; dotnet /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/Release/Landis.Extensions.dll add "DGS_Succession 1.102.txt" \
-# && cp /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/Extension-DGS-Succession/src/bin/Debug/netstandard2.0/Landis.Extension.Succession.DGS.dll /bin/LANDIS_Linux/Core-Model-v8-LINUX/build/extensions/. 
-
-
+#I thought the DGS cs proj wasn't properly updating but it does! Keeping these lines here in case useful for another extension
+##&& sed -i 's|<HintPath>.*</HintPath>|<HintPath>..\\..\\build\\extensions\\Landis.Library.UniversalCohorts-v1.dll</HintPath>|' DGS-succession.csproj \
 #&& sed -i 's|<HintPath>.*</HintPath>|<HintPath>..\\..\\build\\extensions\\Landis.Library.UniversalCohorts-v1.dll</HintPath>|' DGS-succession.csproj
 #sed -i '76i    <HintPath>..\\..\\build\\extensions\\Landis.Library.UniversalCohorts-v1.dll</HintPath>' DGS-succession.csproj
 
-RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
-# Commit 37ce246c37bab3448e3db134373deb56063e14ac is latest at time of writing.
-&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-NECN-Succession.git 37ce246c37bab3448e3db134373deb56063e14ac /src \ 
-&& cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-NECN-Succession/src \
-&& python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./NECN-succession.csproj \
-# The devellopers of NECN forgot to add a line referencing the location of one of the support libraries.
-# I add it here manually at the right place in the file.
-&& cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-NECN-Succession/src \
-&& sed -i '39i    <HintPath>..\\..\\build\\extensions\\Landis.Library.Climate-v5.dll</HintPath>' NECN-succession.csproj \
-&& dotnet build -c Release \
-&& wget https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-NECN-Succession/37ce246c37bab3448e3db134373deb56063e14ac/deploy/installer/NECN_Succession8.txt \
-&& dotnet $LANDIS_EXTENSIONS_TOOL add "NECN_Succession8.txt" \
-&& cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Extension-NECN-Succession
+# RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
+# # Commit 37ce246c37bab3448e3db134373deb56063e14ac is latest at time of writing.
+# && ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-NECN-Succession.git 37ce246c37bab3448e3db134373deb56063e14ac /src \ 
+# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-NECN-Succession/src \
+# && python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./NECN-succession.csproj \
+# # The devellopers of NECN forgot to add a line referencing the location of one of the support libraries.
+# # I add it here manually at the right place in the file.
+# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-NECN-Succession/src \
+# && sed -i '39i    <HintPath>..\\..\\build\\extensions\\Landis.Library.Climate-v5.dll</HintPath>' NECN-succession.csproj \
+# && dotnet build -c Release \
+# && wget https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-NECN-Succession/37ce246c37bab3448e3db134373deb56063e14ac/deploy/installer/NECN_Succession8.txt \
+# && dotnet $LANDIS_EXTENSIONS_TOOL add "NECN_Succession8.txt" \
+# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Extension-NECN-Succession
 
 
 #### DISTURBANCE EXTENSIONS
 # Climate-social Fire
 RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
-# Commit b463ea378f1bcde4369907a408dfe64b9cc52c7a is latest as of writing this.
-#try master?
-&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-Social-Climate-Fire.git master /src \ 
+# # Commit b463ea378f1bcde4369907a408dfe64b9cc52c7a is latest as of writing this.
+# #try master?
+&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-Social-Climate-Fire.git b463ea378f1bcde4369907a408dfe64b9cc52c7a /src \ 
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-Social-Climate-Fire/src \
 && python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./SocialClimateFire.csproj \
 # We got to add two lines to indicate where the support libraries are // app. tab space?
 && sed -i '39i    <HintPath>..\\..\\build\\extensions\\Landis.Library.Climate-v5.dll</HintPath>' SocialClimateFire.csproj \
 && dotnet build -c Release \
-&& wget -O Scrapple_4.txt https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-Social-Climate-Fire/master/deploy/installer/Scrapple%204.txt \
+&& wget -O Scrapple_4.txt https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-Social-Climate-Fire/b463ea378f1bcde4369907a408dfe64b9cc52c7a/deploy/installer/Scrapple%204.txt \
 && dotnet $LANDIS_EXTENSIONS_TOOL add "Scrapple_4.txt" \
 && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Extension-Social-Climate-Fire
 
 #&& sed -i '36i    <HintPath>..\\..\\build\\extensions\\Landis.Library.UniversalCohorts-v1.dll</HintPath>' SocialClimateFire.csproj \
 
 # Biomass Community
-RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
-# Commit 58252f441cc393cc1e63ea6c36175e15bba93916 is latest as of writing this.
-&& ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-Output-Biomass-Community.git 58252f441cc393cc1e63ea6c36175e15bba93916 /src \ 
-&& cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-Output-Biomass-Community/src \
-&& python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./output-biomass-community.csproj \
-# We need to add a line to the csproj.
-&& sed -i '36i    <HintPath>..\\..\\build\\extensions\\Landis.Library.UniversalCohorts-v1.dll</HintPath>' output-biomass-community.csproj \
-&& dotnet build -c Release \
-&& wget https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-Output-Biomass-Community/58252f441cc393cc1e63ea6c36175e15bba93916/deploy/installer/Output%20Biomass%20Community%203.txt \
-&& dotnet $LANDIS_EXTENSIONS_TOOL add "Output Biomass Community 3.txt" \
-&& cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Extension-Output-Biomass-Community
+# RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
+# # Commit 58252f441cc393cc1e63ea6c36175e15bba93916 is latest as of writing this.
+# && ./downloadSpecificGitCommitAndFolder.sh https://github.com/LANDIS-II-Foundation/Extension-Output-Biomass-Community.git 58252f441cc393cc1e63ea6c36175e15bba93916 /src \ 
+# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/Extension-Output-Biomass-Community/src \
+# && python /bin/LANDIS_Linux/Core-Model-v8-LINUX/editing_csproj_LANDIS-II_files.py ./output-biomass-community.csproj \
+# # We need to add a line to the csproj.
+# && sed -i '36i    <HintPath>..\\..\\build\\extensions\\Landis.Library.UniversalCohorts-v1.dll</HintPath>' output-biomass-community.csproj \
+# && dotnet build -c Release \
+# && wget https://raw.githubusercontent.com/LANDIS-II-Foundation/Extension-Output-Biomass-Community/58252f441cc393cc1e63ea6c36175e15bba93916/deploy/installer/Output%20Biomass%20Community%203.txt \
+# && dotnet $LANDIS_EXTENSIONS_TOOL add "Output Biomass Community 3.txt" \
+# && cd /bin/LANDIS_Linux/Core-Model-v8-LINUX/ && rm -r Extension-Output-Biomass-Community
 
 # Biomass Output
 RUN cd /bin/LANDIS_Linux/Core-Model-v8-LINUX \
@@ -265,17 +258,11 @@ RUN sed -i '/<\/Project>/i \
     <Reference Include="Landis.Extension.Succession.DGS.dll">\n\
         <HintPath>../../build/extensions/Landis.Extension.Succession.DGS.dll</HintPath>\n\
     </Reference>\n\
-    <Reference Include="Landis.Extension.Succession.NECN-v8.dll">\n\
-        <HintPath>../../build/extensions/Landis.Extension.Succession.NECN-v8.dll</HintPath>\n\
-    </Reference>\n\
     <Reference Include="Landis.Extension.SocialClimateFire-v4.dll">\n\
         <HintPath>../../build/extensions/Landis.Extension.SocialClimateFire-v4.dll</HintPath>\n\
     </Reference>\n\
     <Reference Include="Landis.Extension.Output.Biomass-v4.dll">\n\
         <HintPath>../../build/extensions/Landis.Extension.Output.Biomass-v4.dll</HintPath>\n\
-    </Reference>\n\
-    <Reference Include="Landis.Extension.Output.BiomassCommunity-v3.dll">\n\
-        <HintPath>../../build/extensions/Landis.Extension.Output.BiomassCommunity-v3.dll</HintPath>\n\
     </Reference>\n\
     <Reference Include="Landis.Extension.Output.BiomassReclass-v4.dll">\n\
         <HintPath>../../build/extensions/Landis.Extension.Output.BiomassReclass-v4.dll</HintPath>\n\
@@ -283,11 +270,11 @@ RUN sed -i '/<\/Project>/i \
     <Reference Include="Landis.Library.Climate-v5.dll">\n\
         <HintPath>../../build/extensions/Landis.Library.Climate-v5.dll</HintPath>\n\
     </Reference>\n\
-    <Reference Include="log4net.dll">\n\
-        <HintPath>../../build/extensions/log4net.dll</HintPath>\n\
-    </Reference>\n\
     <Reference Include="Landis.Library.UniversalCohorts-v1.dll">\n\
         <HintPath>../../build/extensions/Landis.Library.UniversalCohorts-v1.dll</HintPath>\n\
+    </Reference>\n\
+    <Reference Include="log4net.dll">\n\
+        <HintPath>../../build/extensions/log4net.dll</HintPath>\n\
     </Reference>\n\
 </ItemGroup>' /bin/LANDIS_Linux/Core-Model-v8-LINUX/Tool-Console/src/Console.csproj \
 # && cp /bin/LANDIS_Linux/build/extensions/extensions.xml /bin/LANDIS_Linux \

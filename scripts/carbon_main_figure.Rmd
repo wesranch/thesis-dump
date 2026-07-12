@@ -1,0 +1,73 @@
+---
+title: "graphing carbon against empirical"
+author: "Wesley Rancher"
+date: "2025-05-27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(sf)
+knitr::opts_chunk$set(echo = TRUE)
+datadir  <- "/Users/wancher/Documents/thesis/data/analysis/"
+colors <- c("Alaskan birch" = "#67161CFF","Black spruce" = "#3F6148FF",
+            "White spruce" = "#A4804CFF","Trembling aspen" = "#4B5F80FF")
+```
+
+#field data
+
+Q1: how many observations are repeats?
+
+```{r}
+#bind all sampled years and change names
+biomass_files <- list.files(paste0(datadir, "../biomass-input/"), pattern = "biomass*", full.names = TRUE)
+biomass_dfs <- lapply(biomass_files, read.csv)
+biomass_df <- do.call(rbind, biomass_dfs)%>%
+  mutate(Species = ifelse(Species == "resin birch", "Alaskan birch", Species),
+         Species = ifelse(Species == "quaking aspen", "Trembling aspen", Species),
+         Species = ifelse(Species == "black spruce", "Black spruce", Species),
+         Species = ifelse(Species == "white spruce", "White spruce", Species))%>%
+  filter(!Species%in%"black cottonwood")%>%
+  mutate(Carbon_gm2=Bio.g.m2*0.47)
+
+#summarize to isolate permanent samples that are resampled
+resampled_ids <- biomass_df %>%
+  #group_by(Species)%>%#556 omitting this line and 1118 keeping it
+  count(PSP) %>%
+  filter(n > 1) %>%
+  pull(PSP)
+
+#get coordinates of PSPs
+coords_df <- biomass_df %>%
+  select(PSP, latitude, longitude) %>%
+  distinct()
+
+resampled_df <- biomass_df %>%
+  filter(PSP %in% resampled_ids) %>%
+  filter(Year>=2000)%>%
+  group_by(PSP, Species,Year) %>%
+  summarise(mean_Carbon_gm2 = mean(Carbon_gm2, na.rm = TRUE),
+            n_samples = n(),
+            .groups = 'drop')%>%
+  #join to lat long
+  left_join(coords_df, by = "PSP")
+
+#mask to study area
+#albers <- "EPSG:3338"
+resampled_sf <- st_as_sf(resampled_df, coords = c("longitude", "latitude"), crs = 4326)
+mask_vect<-st_read("/Users/wancher/Documents/thesis/data/map-files/FullLandscapeV3_082722.shp")
+
+#force same projection
+mask_bbox <- st_as_sfc(st_bbox(mask_vect), crs = st_crs(mask_vect))
+masked_resampled_sf <- st_transform(resampled_sf, st_crs(mask_vect)) %>%
+  st_filter(mask_vect)#164 unique plots
+st_write(masked_resampled_sf, "/Users/wancher/Documents/thesis/data/analysis/resampled_cafi_locations_V3.shp", append=TRUE)
+#export it to machine on campus to run random forest predictions
+```
+
+#predictions
+
+Q1: how does biomass from each model compare to in situ
+

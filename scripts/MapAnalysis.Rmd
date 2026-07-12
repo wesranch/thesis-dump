@@ -20,10 +20,12 @@ Files
 
 ```{r}
 mapdir <- "/Users/wancher/Documents/thesis/data/MapAnalysis/"
-
+#mapdir <- "F:/jetstream/data/Maps/"
 #landis reference files
-ref <- rast(paste0(mapdir, "AK_ClimateMap_10_Regions.tif"))
-bounds <- vect(paste0(mapdir, "../map-files/FullLandscapeV3_082722.shp"))
+#ref <- rast(paste0(mapdir, "AK_ClimateMap_10_Regions.tif"))
+#bounds <- vect(paste0(mapdir, "../map-files/FullLandscapeV3_082722.shp"))
+ref <- rast("/Users/wancher/Documents/thesis/data/MapAnalysis/AK_ClimateMap_10_Regions.tif")
+#bounds <- vect("F:/FullLandscapeV3_082722.shp")
 
 #projection
 albers <- "EPSG:3338"
@@ -92,6 +94,7 @@ project_rs <- function(file){
   df$Model <- "RF-RS"
   df$ID <- basename(file)
   print(dim(df))
+  varnames(cleanr) <- basename(file)
   return(cleanr)
 }
 
@@ -100,63 +103,202 @@ project_rs <- function(file){
 Apply functions to project and difference
 
 ```{r}
-rs_files <- list.files(paste0(mapdir, "RS_RF_Maps_2000_2024"), pattern = "*.tif", full.names = TRUE)
-landis_files <- list.files(paste0(mapdir, "LandisMaps_04252025"), pattern = "*.img", full.names = TRUE)
+#landis identifiers
+reps <- c(4,5,6)
+yrs <- c(0:4,20:24)
+sp <- c("BlackSpruce", "WhiteSpruce", "QuakingAspen", "PaperBirch")
+combs <- expand.grid(rep = reps, sp = sp, yr = yrs, stringsAsFactors = FALSE)
+
+landisdir <- "F:/Rancher_Sims_Full_Landscape/FinalSimulationsThesis/"
+
+#files
+rs_files <- list.files(mapdir, 
+                       pattern = "MOSAIC_.*.tif", 
+                       full.names = TRUE)
+
+landis_files <- with(combs, sprintf("%sinterior_hist_ncar_rep%d/biomass/%s-%d.img", 
+                                    landisdir, rep, sp, yr))
 
 #apply the functions
 rs_rasters <- lapply(rs_files, project_rs)
 landis_rasters <- lapply(landis_files, project_landis)
 ```
 
+Visualizing relative dominance change
+
+```{r}
+# Helper function to summarize raster
+summarize_raster <- function(r, species, model, timepoint) {
+  tibble(
+    Model = model,
+    Species = species,
+    Year = timepoint,
+    TotalC = global(r, sum, na.rm = TRUE)[[1]]
+  )
+}
+```
+
+Adding in some line by line median compositing
+
+```{r}
+#filter by var name and select
+raster_names <- sapply(rs_rasters, function(x) varnames(x))
+bs_rs_rasters <- grep("Black_spruce", raster_names)
+ab_rs_rasters <- grep("Resin_birch", raster_names)
+qa_rs_rasters <- grep("Quaking_aspen", raster_names)
+ws_rs_rasters <- grep("White_spruce", raster_names)
+
+#rasterize
+bs_rs_stack <- rast(rs_rasters[bs_rs_rasters])
+ab_rs_stack <- rast(rs_rasters[ab_rs_rasters])
+qa_rs_stack <- rast(rs_rasters[qa_rs_rasters])
+ws_rs_stack <- rast(rs_rasters[ws_rs_rasters])
+
+#calculate medians
+bs_rs_median_t1 <- app(bs_rs_stack[[1:5]], median, na.rm = TRUE)
+bs_rs_median_t2 <- app(bs_rs_stack[[6:10]], median, na.rm = TRUE)
+ab_rs_median_t1 <- app(ab_rs_stack[[1:5]], median, na.rm = TRUE)
+ab_rs_median_t2 <- app(ab_rs_stack[[6:10]], median, na.rm = TRUE)
+qa_rs_median_t1 <- app(qa_rs_stack[[1:5]], median, na.rm = TRUE)
+qa_rs_median_t2 <- app(qa_rs_stack[[6:10]], median, na.rm = TRUE)
+ws_rs_median_t1 <- app(ws_rs_stack[[1:5]], median, na.rm = TRUE)
+ws_rs_median_t2 <- app(ws_rs_stack[[6:10]], median, na.rm = TRUE)
+
+
+rs_summary <- bind_rows(
+  summarize_raster(bs_rs_median_t1, "Black Spruce", "RS", "T1"),
+  summarize_raster(bs_rs_median_t2, "Black Spruce", "RS", "T2"),
+  summarize_raster(ab_rs_median_t1, "Alaskan Birch", "RS", "T1"),
+  summarize_raster(ab_rs_median_t2, "Alaskan Birch", "RS", "T2"),
+  summarize_raster(qa_rs_median_t1, "Trembling Aspen", "RS", "T1"),
+  summarize_raster(qa_rs_median_t2, "Trembling Aspen", "RS", "T2"),
+  summarize_raster(ws_rs_median_t1, "White Spruce", "RS", "T1"),
+  summarize_raster(ws_rs_median_t2, "White Spruce", "RS", "T2")
+)
+
+
+
+#difference
+bs_rs_median_diff <- bs_rs_median_t2 - bs_rs_median_t1
+ab_rs_median_diff <- ab_rs_median_t2 - ab_rs_median_t1
+qa_rs_median_diff <- qa_rs_median_t2 - qa_rs_median_t1
+ws_rs_median_diff <- ws_rs_median_t2 - ws_rs_median_t1
+
+#writeRaster(bs_rs_median_diff, paste0(mapdir, "Median_BlackSpruce_RS_Difference.tif"))
+#writeRaster(ab_rs_median_diff, paste0(mapdir, "Median_AlaskanBirch_RS_Difference.tif"))
+#writeRaster(qa_rs_median_diff, paste0(mapdir, "Median_QuakingAspen_RS_Difference.tif"))
+#writeRaster(ws_rs_median_diff, paste0(mapdir, "Median_WhiteSpruce_RS_Difference.tif"))
+```
+
+Replicate averages and median composites for landis maps
+
+```{r}
+#filter by var name and select
+landis_raster_names <- sapply(landis_rasters, function(x) varnames(x))
+t1_years <- 0:4
+t2_years <- 20:24
+
+#empties for results
+median_diff <- list()
+
+for (s in sp) {
+  # --- Step 1: average across replicates per year ---
+  yearly_means <- list()
+  for (yr in c(t1_years, t2_years)) {
+    pattern <- paste0("^", s, "-", yr, "$")
+    indices <- grep(pattern, landis_raster_names)
+    
+    if (length(indices) == 0) next 
+    
+    rasters_for_year <- rast(landis_rasters[indices])
+    yearly_mean <- app(rasters_for_year, mean, na.rm = TRUE)
+    yearly_means[[as.character(yr)]] <- yearly_mean
+  }
+  # --- Step 2: Stack yearly means for t1 and t2 ---
+  t1_stack <- rast(yearly_means[as.character(t1_years)])
+  t2_stack <- rast(yearly_means[as.character(t2_years)])
+
+  # --- Step 3: Median across years ---
+  t1_median <- app(t1_stack, median, na.rm = TRUE)
+  t2_median <- app(t2_stack, median, na.rm = TRUE)
+
+  # --- Step 4: Difference (T2 − T1) ---
+  median_diff[[s]] <- t2_median - t1_median
+}
+
+#show
+plot(median_diff[["BlackSpruce"]])
+
+# LANDIS summaries
+landis_summary <- bind_rows(
+  summarize_raster(median_diff[["BlackSpruce"]] + bs_rs_median_t1, "Black Spruce", "LANDIS", "T2"),
+  summarize_raster(bs_rs_median_t1, "Black Spruce", "LANDIS", "T1"),
+  summarize_raster(median_diff[["PaperBirch"]] + ab_rs_median_t1, "Alaskan Birch", "LANDIS", "T2"),
+  summarize_raster(ab_rs_median_t1, "Alaskan Birch", "LANDIS", "T1"),
+  summarize_raster(median_diff[["QuakingAspen"]] + qa_rs_median_t1, "Trembling Aspen", "LANDIS", "T2"),
+  summarize_raster(qa_rs_median_t1, "Trembling Aspen", "LANDIS", "T1"),
+  summarize_raster(median_diff[["WhiteSpruce"]] + ws_rs_median_t1, "White Spruce", "LANDIS", "T2"),
+  summarize_raster(ws_rs_median_t1, "White Spruce", "LANDIS", "T1")
+)
+
+#writeRaster(median_diff[["BlackSpruce"]], paste0(mapdir, "Median_BlackSpruce_LANDIS_Difference.tif"))
+#writeRaster(median_diff[["PaperBirch"]], paste0(mapdir, "Median_AlaskanBirch_LANDIS_Difference.tif"))
+#writeRaster(median_diff[["QuakingAspen"]], paste0(mapdir, "Median_QuakingAspen_LANDIS_Difference.tif"))
+#writeRaster(median_diff[["WhiteSpruce"]], paste0(mapdir, "Median_WhiteSpruce_LANDIS_Difference.tif"))
+```
+
 Convert to list of difference rasters, normalize, and convert to df
 
 ```{r}
-diff_list <- list(
-  "Black Spruce_RS" = rs_rasters[[2]] - rs_rasters[[1]],
-  "Quaking Aspen_RS" = rs_rasters[[4]] - rs_rasters[[3]],
-  "Alaskan Birch_RS" = rs_rasters[[6]] - rs_rasters[[5]],
-  "White Spruce_RS" = rs_rasters[[8]] - rs_rasters[[7]],
-  "Black Spruce_LANDIS" = landis_rasters[[2]] - landis_rasters[[1]],
-  "Alaskan Birch_LANDIS" = landis_rasters[[4]] - landis_rasters[[3]],
-  "Quaking Aspen_LANDIS" = landis_rasters[[6]] - landis_rasters[[4]],
-  "White Spruce_LANDIS" = landis_rasters[[8]] - landis_rasters[[7]]
-)
-
-full_list <- list(
-  "Black Spruce_RS 2000" = rs_rasters[[1]],
-  "Black Spruce_RS 2024" = rs_rasters[[2]],
-  "Quaking Aspen_RS 2000" = rs_rasters[[3]],
-  "Quaking Aspen_RS 2024" = rs_rasters[[4]],
-  "Alaskan Birch_RS 2000" = rs_rasters[[5]],
-  "Alaskan Birch_RS 2024" = rs_rasters[[6]],
-  "White Spruce_RS 2000" = rs_rasters[[7]],
-  "White Spruce_RS 2024" = rs_rasters[[8]],
-  "Black Spruce_LANDIS 2000" = landis_rasters[[1]],
-  "Black Spruce_LANDIS 2024" = landis_rasters[[2]],
-  "Quaking Aspen_LANDIS 2000" = landis_rasters[[3]],
-  "Quaking Aspen_LANDIS 2024" = landis_rasters[[4]],
-  "Alaskan Birch_LANDIS 2000" = landis_rasters[[5]],
-  "Alaskan Birch_LANDIS 2024" = landis_rasters[[6]],
-  "White Spruce_LANDIS 2000" = landis_rasters[[7]],
-  "White Spruce_LANDIS 2024" = landis_rasters[[8]]
-)
-
-#min max scaling
-# normalize_raster <- function(r) {
-#   mm <- terra::minmax(r)
-#   scaled <- (r - mm[1]) / (mm[2] - mm[1])        # scales to 0–1
-#   scaled * 2 - 1                                  # rescales to -1–1
-# }
+# diff_list <- list(
+#   "Black Spruce_RS" = rs_rasters[[2]] - rs_rasters[[1]],
+#   "Quaking Aspen_RS" = rs_rasters[[4]] - rs_rasters[[3]],
+#   "Alaskan Birch_RS" = rs_rasters[[6]] - rs_rasters[[5]],
+#   "White Spruce_RS" = rs_rasters[[8]] - rs_rasters[[7]],
+#   "Black Spruce_LANDIS" = landis_rasters[[2]] - landis_rasters[[1]],
+#   "Alaskan Birch_LANDIS" = landis_rasters[[4]] - landis_rasters[[3]],
+#   "Quaking Aspen_LANDIS" = landis_rasters[[6]] - landis_rasters[[4]],
+#   "White Spruce_LANDIS" = landis_rasters[[8]] - landis_rasters[[7]]
+# )
 # 
-# # apply normalization
-# diff_list_scaled <- lapply(diff_list, normalize_raster)
+# full_list <- list(
+#   "Black Spruce_RS 2000" = rs_rasters[[1]],
+#   "Black Spruce_RS 2024" = rs_rasters[[2]],
+#   "Quaking Aspen_RS 2000" = rs_rasters[[3]],
+#   "Quaking Aspen_RS 2024" = rs_rasters[[4]],
+#   "Alaskan Birch_RS 2000" = rs_rasters[[5]],
+#   "Alaskan Birch_RS 2024" = rs_rasters[[6]],
+#   "White Spruce_RS 2000" = rs_rasters[[7]],
+#   "White Spruce_RS 2024" = rs_rasters[[8]],
+#   "Black Spruce_LANDIS 2000" = landis_rasters[[1]],
+#   "Black Spruce_LANDIS 2024" = landis_rasters[[2]],
+#   "Quaking Aspen_LANDIS 2000" = landis_rasters[[3]],
+#   "Quaking Aspen_LANDIS 2024" = landis_rasters[[4]],
+#   "Alaskan Birch_LANDIS 2000" = landis_rasters[[5]],
+#   "Alaskan Birch_LANDIS 2024" = landis_rasters[[6]],
+#   "White Spruce_LANDIS 2000" = landis_rasters[[7]],
+#   "White Spruce_LANDIS 2024" = landis_rasters[[8]]
+# )
+
+#read in processed median rasters
+median_list <- list.files(paste0(mapdir, "Medians/"), full.names = TRUE)
+median_rasters <- lapply(median_list,rast)
+names(median_rasters) <- basename(median_list)
+
+#grab inactive cells from climate regions map
+bounds <- vect(paste0(mapdir, "../map-files/FullLandscapeV3_082722.shp"))
+climregions <- rast(paste0(mapdir, "AK_ClimateMap_10_Regions.tif"))
+crs(climregions) <- albers
+clipped_clim <- mask(climregions, bounds)
+clipped_clim[clipped_clim != 0] <- NA
+zero_df <- as.data.frame(clipped_clim,xy=TRUE)
 
 # convert to data frame
-raster_df <- bind_rows(lapply(names(diff_list), function(name) {
-  df <- as.data.frame(diff_list[[name]], xy = TRUE)
-  df$Species <- sub("_.*", "", name)
-  df$Model <- sub(".*_(\\w+).*", "\\1", name)
-  df$Year <- sub(".* (\\d{4})", "\\1", name)
+raster_df <- bind_rows(lapply(names(median_rasters), function(name) {
+  df <- as.data.frame(median_rasters[[name]], xy = TRUE)
+  df$Species <- strsplit(name, "_")[[1]][2]
+  df$Model <- strsplit(name, "_")[[1]][3]
+  #df$Year <- sub(".* (\\d{4})", "\\1", name)
   colnames(df)[3] <- "Value"
   return(df)
 }))
@@ -164,42 +306,422 @@ raster_df <- bind_rows(lapply(names(diff_list), function(name) {
 #plotting
 raster_df$Class <- factor(raster_df$Value)
 
-# Define color scale once for consistency
-fill_scale <- scale_fill_distiller(palette="RdYlBu", direction=1, type="div", na.value="black")
+
+#fill_scale <- scale_fill_distiller(palette="YlGnBu", direction=1,na.value="black")
+fill_scale <- scale_fill_distiller(
+  palette = "RdYlGn",  # Red → Yellow → Green
+  direction = 1,       # Use -1 if you want Green → Red
+  na.value = "black"
+)
 
 # Base theme
-base_theme <- theme_bw(base_family = "Times New Roman") +
+base_theme <- theme_minimal(base_family = "Times New Roman") +
   theme(
     axis.text = element_blank(),
     axis.title = element_blank(),
-    panel.grid = element_line(color="gray50")
+    panel.grid = element_blank(),
+    strip.text = element_text(color = "black", size = 13)
   )
 
-# RS plot
-rs_df <- raster_df %>% filter(Model == "RS")
-rs_plot <- ggplot(rs_df, aes(x = x, y = y, fill = Value)) +
-  geom_raster() +
-  fill_scale +
-  coord_equal() +
-  facet_grid(Species ~ .) +
-  base_theme +
-  theme(legend.position = "none")
+# species name to lowercase
+library(stringr)
+library(sf)
+bounds_sf <- st_read("/Users/wancher/Documents/thesis/data/map-files/FullLandscapeV3_082722.shp")
+
+#rename quaking aspen
+raster_df_processed_clean<- raster_df %>%
+  mutate(Species = ifelse(Species == "AlaskanBirch", "Alaskan birch", Species),
+         Species = ifelse(Species == "QuakingAspen", "Trembling aspen", Species),
+         Species = ifelse(Species == "BlackSpruce", "Black spruce", Species),
+         Species = ifelse(Species == "WhiteSpruce", "White spruce", Species))%>%
+  mutate(Species = factor(Species, levels = c("Black spruce", 
+                                              "White spruce", 
+                                              "Alaskan birch", 
+                                              "Trembling aspen")))
+#RS plot
+rs_df <- raster_df_processed_clean%>% filter(Model == "RS")
+rs_plots <- list()
+for (spp in species){
+  rs_plot <- ggplot() +
+    geom_raster(data = rs_df%>%filter(Species==spp), aes(x = x, y = y, fill = Value)) +
+    geom_raster(data = zero_df, aes(x = x, y = y), fill = "black") +
+    geom_sf(data = bounds_sf, fill = NA, color = "black", linewidth = 0.3) +
+    fill_scale +
+    coord_sf(expand = FALSE) +
+    facet_grid(Species~.) +
+    #labs(fill = "Δ C\n(g m-2)")+
+    base_theme +
+    theme(legend.position = "none")  
+  rs_plots[[spp]] <- rs_plot
+}
+
 
 # LANDIS plot (has the legend)
-landis_df <- raster_df %>% filter(Model == "LANDIS")
-landis_plot <- ggplot(landis_df, aes(x = x, y = y, fill = Value)) +
-  geom_raster() +
-  fill_scale +
-  coord_equal() +
-  facet_grid(Species ~ .) +
-  base_theme +
-  theme(legend.position = "bottom")
-
+landis_plots <- list()
+landis_df <- raster_df_processed_clean %>% filter(Model == "LANDIS")
+for (spp in species){
+  landis_plot <- ggplot() +
+    geom_raster(data=landis_df%>%filter(Species==spp), aes(x = x, y = y, fill = Value)) +
+    geom_raster(data = zero_df, aes(x = x, y = y), fill = "black")+
+    geom_sf(data = bounds_sf, fill = NA, color = "black", linewidth = 0.3) +
+    fill_scale +
+    coord_sf(expand = FALSE)+
+    facet_grid(Species~.) +
+    #labs(fill = "Δ C\n(g m-2)")+
+    base_theme +
+    theme(legend.position = "none")
+  landis_plots[[spp]] <- landis_plot
+}
 # Combine plots
-combined <- rs_plot | landis_plot +
-  #plot_layout(widths = c(1, 1), guides = "collect") &
-  theme(legend.position = "bottom")
+combined <- (rs_plot|landis_plot)
+  #plot_layout(widths = c(1, 1), guides = "collect")
 
 combined
 
+rs_plots_reduced <- reduce(rs_plots, `/`)
+landis_plots_reduced <- reduce(landis_plots, `/`)
+combined_plot <- rs_plots_reduced | landis_plots_reduced
+combined_plot
+```
+
+```{r}
+png("figures/Results_Carbon_Maps_LANDIS.png", width = 5, height = 11, units = "in", res = 300)
+print(landis_plots_reduced)
+dev.off()
+```
+
+Hana says I need to visualize the change since there is a lot of green
+
+```{r}
+#libraries
+library(tidyverse)
+library(sf)
+library(patchwork)
+library(RColorBrewer)
+library(terra)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(purrr)
+library(viridis)
+
+#raster directory
+mapdir <- "/Users/wancher/Documents/thesis/data/MapAnalysis/"
+
+#read in processed median rasters
+median_list <- list.files(paste0(mapdir, "Medians/"), full.names = TRUE)
+median_rasters <- lapply(median_list,rast)
+names(median_rasters) <- basename(median_list)
+
+# Read bounds
+bounds_sf <- st_read("/Users/wancher/Documents/thesis/data/map-files/FullLandscapeV3_082722.shp")
+
+# Convert median raster list to long data frame
+raster_df <- bind_rows(lapply(names(median_rasters), function(name) {
+  df <- as.data.frame(median_rasters[[name]], xy = TRUE)
+  df$Species <- strsplit(name, "_")[[1]][2]
+  df$Model <- strsplit(name, "_")[[1]][3]
+  colnames(df)[3] <- "Value"
+  return(df)
+}))
+
+# Classify and clean species names
+raster_df_processed_clean <- raster_df %>%
+  mutate(
+    Species = case_when(
+      Species == "AlaskanBirch" ~ "Alaskan birch",
+      Species == "QuakingAspen" ~ "Trembling aspen",
+      Species == "BlackSpruce" ~ "Black spruce",
+      Species == "WhiteSpruce" ~ "White spruce",
+      TRUE ~ Species
+    ),
+    Species = factor(Species, levels = c("Black spruce", "White spruce", "Alaskan birch", "Trembling aspen"))
+  )
+change_levels <- c("< -100", "-100 to -50", "-50 to -10", "-10 to -1",
+                   "-1 to 1", "1 to 10", "10 to 50", "50 to 100", "> 100")
+raster_df_processed_clean <- raster_df_processed_clean %>%
+  mutate(ChangeClass = cut(
+    Value,
+    breaks = c(-Inf, -100, -50, -10, -1, 1, 10, 50, 100, Inf),
+    labels = change_levels,
+    include.lowest = TRUE
+  ))
+# All combinations of Species and ChangeClass
+all_combinations <- expand.grid(
+  Species = levels(raster_df_processed_clean$Species),
+  ChangeClass = factor(change_levels, levels = change_levels)
+)
+
+#rs change summary
+change_summary <- raster_df_processed_clean %>%
+  filter(Model == "RS") %>%
+  mutate(ChangeClass = factor(ChangeClass, levels = change_levels)) %>%
+  group_by(Species, ChangeClass) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  complete(Species, ChangeClass = factor(change_levels, levels = change_levels), fill = list(count = 0)) %>%
+  group_by(Species) %>%
+  mutate(
+    percent = 100 * count / sum(count),
+    ChangeClass = factor(ChangeClass, levels = change_levels)
+  )
+#landis 
+change_summary_2 <- raster_df_processed_clean %>%
+  filter(Model == "LANDIS") %>%
+  mutate(ChangeClass = factor(ChangeClass, levels = change_levels)) %>%
+  group_by(Species, ChangeClass) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  complete(Species, ChangeClass = factor(change_levels, levels = change_levels), fill = list(count = 0)) %>%
+  group_by(Species) %>%
+  mutate(
+    percent = 100 * count / sum(count),
+    ChangeClass = factor(ChangeClass, levels = change_levels)
+  )
+
+# Fill scale
+fill_scale <- scale_fill_distiller(
+  palette = "RdYlGn",
+  direction = 1,
+  na.value = "black"
+)
+
+# Base theme
+base_theme <- theme_minimal(base_family = "Times New Roman") +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(color = "black", size = 13)
+  )
+
+
+# Histogram of ChangeClass faceted by model
+rs_df_2 <- raster_df_processed_clean%>% filter(Model == "RS")
+landis_df_2 <- raster_df_processed_clean%>% filter(Model == "LANDIS")
+dual_plots_rs <- list()
+dual_pct_plots_rs <- list()
+dual_plots_landis <- list()
+dual_pct_plots_landis <- list()
+combined_plots_all <- list()
+for (spp in species){
+  
+  rs_plot <- ggplot() +
+    geom_raster(data = rs_df_2%>%filter(Species==c("Alaskan birch", "Trembling aspen")), aes(x = x, y = y, fill = Value)) +
+    geom_raster(data = zero_df, aes(x = x, y = y), fill = "black") +
+    geom_sf(data = bounds_sf, fill = NA, color = "black", linewidth = 0.3) +
+    fill_scale +
+    coord_sf(expand = FALSE) +
+    #facet_grid(Species~.) +
+    #labs(fill = "Δ C\n(g m-2)")+
+    base_theme +
+    theme(legend.position = "none",
+          strip.text = element_blank())  
+  #rs_plots[[spp]] <- rs_plot
+
+  hist_plot <- ggplot(raster_df_processed_clean%>%filter(Species==spp, Model=="RS"), 
+                      aes(x = ChangeClass, fill = ChangeClass)) +
+    geom_bar() +
+    #facet_wrap(~Model) +
+    scale_fill_brewer(palette = "RdYlGn", na.value = "black") +
+    labs(
+      #x = "Change in Carbon (g C / m²)",
+      y = "Pixel Count",
+      fill = "ΔC"
+    ) +
+    coord_flip()+
+    theme_minimal(base_family = "Times New Roman") +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(color = "black", size = 13),
+      legend.position = "none"
+    )
+  
+  pct_base_rs <- ggplot(change_summary %>% filter(Species == spp),
+                     aes(x = ChangeClass, y = percent, fill = ChangeClass)) +
+    geom_bar(stat = "identity") +
+    facet_grid(Species ~ .) +
+    scale_fill_brewer(palette = "RdYlGn", na.value = "black") +
+    coord_cartesian(xlim = c("< -100", "> 100"), ylim = c(0, 40))+
+    coord_flip() +
+    theme_minimal(base_family = "Times New Roman") +
+    theme(
+      axis.text.x = element_text(size = 16, hjust = 1),
+      axis.text.y = element_text(size = 16, hjust = 1),
+      axis.title = element_text(size = 18, color ="black"),
+      strip.text = element_text(color = "black", size = 18),
+      legend.position = "none"
+    )
+  
+  # Add labels conditionally
+  if (spp == spp) {
+    pct_plot <- pct_base_rs +
+      labs(y = "Percent area", x = "ΔC (g C m-2)")
+  } else {
+    pct_plot <- pct_base_rs +
+      labs(y=element_blank(),x = "ΔC (g C m-2)")
+  }
+
+  dual_plot <- rs_plot | hist_plot+plot_layout(widths = c(1, .5))
+  dual_plots_rs[[spp]] <- dual_plot
+  
+  dual_plot_pct <- rs_plot | pct_plot +plot_layout(widths = c(1, .25))
+  dual_pct_plots_rs[[spp]] <- dual_plot_pct
+  
+  
+  #landis
+    
+  landis_plot <- ggplot() +
+    geom_raster(data = landis_df_2%>%filter(Species==spp), aes(x = x, y = y, fill = Value)) +
+    geom_raster(data = zero_df, aes(x = x, y = y), fill = "black") +
+    geom_sf(data = bounds_sf, fill = NA, color = "black", linewidth = 0.3) +
+    fill_scale +
+    coord_sf(expand = FALSE) +
+    facet_grid(Species~.) +
+    #labs(fill = "Δ C\n(g m-2)")+
+    base_theme +
+    theme(legend.position = "none",
+          strip.text = element_blank())  
+  #landis_plots[[spp]] <- landis_plot
+
+ 
+  
+  pct_base <- ggplot(change_summary_2 %>% filter(Species == spp),
+                     aes(x = ChangeClass, y = percent, fill = ChangeClass)) +
+    geom_bar(stat = "identity") +
+    facet_grid(Species ~ .) +
+    scale_fill_brewer(palette = "RdYlGn", na.value = "black") +
+    coord_cartesian(xlim = c("< -100", "> 100"), ylim = c(0, 50))+
+    coord_flip() +
+    theme_minimal(base_family = "Times New Roman") +
+    theme(
+      axis.text.x = element_text(size = 16, hjust = 1),
+      axis.text.y = element_text(size = 16, hjust = 1),
+      axis.title = element_text(size = 18, color ="black"),
+      strip.text = element_text(color = "black", size = 18),
+      legend.position = "none"
+    )
+  
+  
+  # Add labels conditionally
+  if (spp == spp) {
+    pct_plot_landis <- pct_base +
+      labs(y = "Percent area", x = "ΔC (g C m-2)")
+  } else {
+    pct_plot_landis <- pct_base +
+      labs(y= element_blank(),x = "ΔC (g C m-2)")
+  }
+  
+  dual_plot_pct_landis<- landis_plot | pct_plot_landis +plot_layout(widths = c(1, .25))
+  dual_pct_plots_landis[[spp]] <- dual_plot_pct_landis
+  full_combined <- rs_plot | pct_plot + plot_layout(widths = c(4, .5))| landis_plot | pct_plot_landis + plot_layout(widths = c(4, .5))
+  combined_plots_all[[spp]] <- full_combined
+}
+# Final output
+dual_plots_rs_reduced <- reduce(dual_plots_rs, `/`)
+dual_pct_plots_rs_reduced <- reduce(dual_pct_plots_rs, `/`)
+#dual_plots_landis_reduced <- reduce(dual_plots_landis, `/`)
+dual_pct_plots_landis_reduced <- reduce(dual_pct_plots_landis, `/`)
+combined_plots_reduced <- reduce(combined_plots_all, `/`)
+
+```
+
+```{r}
+png("figures/Results_MAPAS_2.png", width = 11, height = 10, units = "in", res = 300)
+print(combined_plots_reduced)
+dev.off()
+```
+
+relationships between positive increases between models
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(broom)
+
+# Add a unique pixel ID per species-model combo (assumes row order implies spatial alignment)
+raster_df_processed_clean <- raster_df_processed_clean %>%
+  group_by(Model, Species) %>%
+  mutate(RowID = row_number()) %>%
+  ungroup()
+
+# Reshape data so each row is a pixel with RS and LANDIS values side-by-side
+wide_df <- raster_df_processed_clean %>%
+  select(Species, Model, RowID, Value) %>%
+  pivot_wider(names_from = Model, values_from = Value) %>%
+  filter(!is.na(RS) & !is.na(LANDIS)) %>%
+  mutate(rs_change = RS > 0,
+         landis_change = LANDIS > 0)
+
+# Run logistic regression (or linear) for each species
+model_results <- wide_df %>%
+  group_by(Species) %>%
+  nest() %>%
+  mutate(
+    model = map(data, ~ lm(rs_change ~ landis_change, data = .x)),
+    summary = map(model, glance),
+    coefficients = map(model, tidy)
+  ) %>%
+  select(Species, summary, coefficients) %>%
+  unnest(summary)
+
+# View results
+model_results %>%
+  select(Species, r.squared, p.value, adj.r.squared, statistic)
+species_list <- unique(raster_df_processed_clean$Species)
+
+agreement_summary <- lapply(species_list, function(species) {
+  rs_vals <- raster_df_processed_clean$Value[raster_df_processed_clean$Species == species & 
+                                             raster_df_processed_clean$Model == "RS"]
+  landis_vals <- raster_df_processed_clean$Value[raster_df_processed_clean$Species == species & 
+                                                 raster_df_processed_clean$Model == "LANDIS"]
+  
+  # Must ensure length match
+  n <- min(length(rs_vals), length(landis_vals))
+  rs_gain <- rs_vals[1:n] > 0
+  landis_gain <- landis_vals[1:n] > 0
+  
+  # Agreement vectors
+  agreement <- rs_gain == landis_gain
+  
+  list(
+    Species = species,
+    AgreementPercent = mean(agreement) * 100,
+    GainBoth = mean(rs_gain & landis_gain) * 100,
+    LossBoth = mean(!rs_gain & !landis_gain) * 100,
+    RS_Gain_LANDIS_Loss = mean(rs_gain & !landis_gain) * 100,
+    RS_Loss_LANDIS_Gain = mean(!rs_gain & landis_gain) * 100
+  )
+})
+agreement_df <- do.call(rbind, lapply(agreement_summary, as.data.frame))
+
+##does conifer loss correspond to hardwood gain (models independtly)
+library(tidyr)
+conifers <- c("Black spruce", "White spruce")
+hardwoods <- c("Alaskan birch", "Trembling aspen")
+wide_df <- raster_df_processed_clean %>%
+  pivot_wider(names_from = c(Model, Species), values_from = Value)
+rs_conifer_loss <- (wide_df$`RS_Black spruce` < 0) | (wide_df$`RS_White spruce` < 0)
+
+# Hardwood gains in RS
+rs_hardwood_gain <- (wide_df$`RS_Alaskan birch` > 0) | (wide_df$`RS_Trembling aspen` > 0)
+
+# % of conifer-loss pixels where hardwoods increased
+rs_overlap <- mean(rs_conifer_loss & rs_hardwood_gain, na.rm = TRUE) * 100
+landis_conifer_loss <- (wide_df$`LANDIS_Black spruce` < 0) | (wide_df$`LANDIS_White spruce` < 0)
+landis_hardwood_gain <- (wide_df$`LANDIS_Alaskan birch` > 0) | (wide_df$`LANDIS_Trembling aspen` > 0)
+
+landis_overlap <- mean(landis_conifer_loss & landis_hardwood_gain, na.rm = TRUE) * 100
+rs_conifer_loss_percent <- mean(rs_conifer_loss, na.rm = TRUE) * 100
+landis_conifer_loss_percent <- mean(landis_conifer_loss, na.rm = TRUE) * 100
+rs_hardwood_gain_percent <- mean(rs_hardwood_gain, na.rm = TRUE) * 100
+landis_hardwood_gain_percent <- mean(landis_hardwood_gain, na.rm = TRUE) * 100
+data.frame(
+  Metric = c("Conifer Loss", "Hardwood Gain", "Conifer Loss + Hardwood Gain"),
+  `RS-RF (%)` = c(round(rs_conifer_loss_percent, 1),
+                  round(rs_hardwood_gain_percent, 1),
+                  round(rs_overlap, 1)),
+  `LANDIS-II (%)` = c(round(landis_conifer_loss_percent, 1),
+                      round(landis_hardwood_gain_percent, 1),
+                      round(landis_overlap, 1))
+)
 ```

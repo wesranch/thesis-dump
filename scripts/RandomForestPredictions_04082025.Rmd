@@ -8,8 +8,10 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-setwd("F:/jetstream/")
+#setwd("F:/jetstream/")
 dir <- "F:/remoteSensing/data/output/"
+dir <- "/Users/wancher/Documents/thesis/"
+setwd(dir)
 ```
 
 Read in training dataset and rasters to make predictions on
@@ -28,12 +30,61 @@ library(dplyr)
 #Training Dataframe was prepared in (../scripts/grf_ag_carbon.py)
 #these are in the same order as the raster bands
 training_df <- read.csv("data/analysis/RandomForest_TrainingDATA_04242025.csv") %>%
- select(-PSP) %>%
- select(-starts_with("tsf_")) #%>% select(-dep2_permafrost, -pr, -tas)
+  select(-PSP) %>% 
+  select(-starts_with("tsf_")) %>% select(-dep2_permafrost, -pr, -tas)
 
 # training_df <- read.csv("data/RandomForest_TrainingDATA_04242025.csv") %>% 
 #   select(-PSP) %>%
 #   select(-starts_with("tsf_"))
+library(tidyverse)
+
+# Categorize columns by season
+get_season <- function(name) {
+  if (str_detect(name, "_sum")) return("Summer")
+  if (str_detect(name, "_spr")) return("Spring")
+  if (str_detect(name, "_fal")) return("Fall")
+  if (str_detect(name, "DSM")) return("Topo")
+  if (str_detect(name, "aspect")) return("Topo")
+  if (str_detect(name, "slope")) return("Topo")
+  return(NA)
+}
+
+# Remove unwanted columns and convert to long format
+long_df <- training_df %>%
+  select(-Species)%>%
+  pivot_longer(cols = everything(), names_to = "feature", values_to = "value") %>%
+  mutate(season = map_chr(feature, get_season)) %>%
+  filter(!is.na(season))%>%
+  filter(!is.na(value))
+
+# Plot normalized histograms
+predsplot <- ggplot(long_df, aes(x = value, color = season, fill = season)) +
+  geom_density(alpha = 0.3, linewidth = 0.8) +
+  facet_wrap(season~., scales = "free", ncol=4) +
+  scale_fill_viridis_d(option = "turbo", direction=-1) +
+  scale_color_viridis_d(option = "turbo",direction=-1) +
+  labs(
+    x = "Value", y = "Density"
+  ) +
+  theme_minimal(base_family = "Times New Roman") +
+  coord_cartesian(xlim = c(-1, 1))+
+  coord_flip()+
+  theme(
+    axis.text = element_text(color = "black", size = 14),
+    #axis.text.x = element_blank(),
+    plot.title = element_text(color = "black", size = 20),
+    axis.title.y = element_text(color = "black", size = 16),
+    axis.title.x = element_text(color = "black", size = 16),
+    strip.text = element_text(color = "black", size = 12.75),
+    legend.position = "none",
+    panel.grid.major = element_line(color = "gray80", linewidth = 0.25),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
+  )+
+  guides(color = guide_legend(ncol = 3), fill = guide_legend(ncol = 3))
+#png("writing/figures/Results_Supplemental_Predictors_RS.png", width = 10, height = 6.25, units = "in", res = 300)
+#print(predsplot)
+#dev.off()
 ```
 
 Add lat/lon as bands to the rasters since they are used in model training. Here I generated systematic points within the landscape amounting to ~10% of the entire raster to make predictions for and do change detection. I also make predictions for the raster cells that correspond to actual plot locations to make comparisons of predictions at a plot and regional level.
@@ -42,28 +93,30 @@ Add lat/lon as bands to the rasters since they are used in model training. Here 
 library(terra)
 
 #files
-ref <- rast(paste0(dir, "gee/mosaics/landisReg-FULLmosaic-hist-2015.tif"), lyr=33)#elevation
-bounds <- vect("F:/randomForest_Landis/input/shp/FullLandscapeV3_082722.shp")
-fieldSites <- vect("F:/randomForest_Landis/input/shp/cafiPlotsCropped.shp")
+#ref <- rast(paste0(dir, "gee/mosaics/landisReg-FULLmosaic-hist-2015.tif"), lyr=33)#elevation
+#bounds <- vect("F:/randomForest_Landis/input/shp/FullLandscapeV3_082722.shp")
+#fieldSites <- vect("F:/randomForest_Landis/input/shp/cafiPlotsCropped.shp")
 
 #ecoregions for zonal stats
-ref_eco <- rast("F:/Rancher_Sims_Full_Landscape/FinalSimulationsThesis/Cleaned_Inputs/AK_ClimateMap_10_Regions.tif")
-bounds <- vect("F:/randomForest_Landis/input/shp/FullLandscapeV3_082722.shp")
-crs(ref_eco) <- "EPSG:3338"
-ref_eco_masked <- mask(ref_eco, bounds)
+#ref_eco <- rast("F:/Rancher_Sims_Full_Landscape/FinalSimulationsThesis/Cleaned_Inputs/AK_ClimateMap_10_Regions.tif")
+#bounds <- vect("F:/randomForest_Landis/input/shp/FullLandscapeV3_082722.shp")
+#crs(ref_eco) <- "EPSG:3338"
+#ref_eco_masked <- mask(ref_eco, bounds)
 
 
-plot(bounds, main = "Field Sites")
-plot(fieldSites, add = TRUE, pch = 15, col = "purple")
+#plot(bounds, main = "Field Sites")
+#plot(fieldSites, add = TRUE, pch = 15, col = "purple")
 
 #sample the landscape (very small proportion of the landscape but should be geographically representative)
-ref <- resample(ref, ref_eco_masked, method="average")#resample to 200m
-regularPoints <- spatSample(ref, size=2000000, method = "regular", as.points = TRUE, ext = bounds, na.rm=TRUE)
+#ref <- resample(ref, ref_eco_masked, method="average")#resample to 200m
+#regularPoints <- spatSample(ref, size=2000000, method = "regular", as.points = TRUE, ext = bounds, na.rm=TRUE)
+regularPoints <- vect("data/analysis/resampled_cafi_locations.shp")
 #ref_eco_pts <- terra::extract(ref_eco_masked, regularPoints, xy = TRUE)
 #randomPoints <- spatSample(ref, size=180000, method = "random", as.points = TRUE, ext = bounds, na.rm=TRUE)
 
-plot(bounds, main = "Points to predict")
-plot(sample(regularPoints, 1000), add = TRUE, pch = 15, col = "blue")#just plotting 1000
+#plot(bounds, main = "Points to predict")
+#plot(sample(regularPoints, 1000), add = TRUE, pch = 15, col = "blue")#just plotting 1000
+plot(regularPoints)
 #plot(bounds, main = "Random Points for predictions")
 #plot(sample(randomPoints, 1000), add = TRUE, pch = 15, col = adjustcolor("blue", alpha.f = 0.85))
 ```
@@ -123,6 +176,7 @@ nmds_rf <- function(raw_model, filtered_train_df, species) {
   prox <- raw_model$proximity
   
   #nmds
+  #mds_coords <- metaMDS(1 - prox, method = "euclidean", k = 3, try=10, model="local")
   mds_coords <- monoMDS(1 - prox, k = 2, maxit=100, model="local")
   mds_df <- as.data.frame(scores(mds_coords, display  = "sites"))
   #colnames(mds_df) <- c("Dim1", "Dim2")
@@ -133,7 +187,7 @@ nmds_rf <- function(raw_model, filtered_train_df, species) {
   
   #join to predictors
   numeric_predictors <- filtered_train_df %>% 
-    select(where(is.numeric), -Carbon_gm2, -starts_with("severity_"), -total_fires) %>% 
+    select(where(is.numeric), -Carbon_gm2) %>% 
     na.omit()
   
   #environmental fit
@@ -237,9 +291,10 @@ train_model <- function(df, species, response="Carbon_gm2") {
   formula <- as.formula(paste(response, "~", paste(predictors, collapse = "+")))
   
   #tidy models recipe (swapping in entire dataset)
-  recipe <- recipe(formula = formula, data = training_df_one_spp) #%>% 
-    #step_nzv(all_predictors()) %>%
-    #step_corr(all_numeric_predictors(), threshold = 0.80, use = "pairwise.complete.obs", method = "pearson")
+  recipe <- recipe(formula = formula, data = training_df_one_spp) %>% 
+    step_nzv(all_predictors()) %>%
+    step_corr(all_numeric_predictors(), threshold = 0.80, use = "pairwise.complete.obs", method = "pearson") %>%
+    step_normalize(all_numeric_predictors())
   
   #define models to run (nts: cite packages)
   #use additional script to set up cforest to be tidymodels friendly
@@ -260,7 +315,7 @@ train_model <- function(df, species, response="Carbon_gm2") {
   svm_params <- parameters(cost(range = c(-8, 4), trans = scales::log10_trans()), rbf_sigma(range = c(-3, 0), trans = scales::log10_trans()))
     
   #rf, ranger, and xgb use the same params
-  rf_grid <- expand.grid(mtry = seq(5, 20, 5), trees = seq(200,800,200), min_n = seq(1, 12, 3))
+  rf_grid <- expand.grid(mtry = seq(5, 10, 5), trees = seq(600,700,100), min_n = seq(1, 4, 3))
 
   kknn_grid <- grid_regular(kknn_params, levels = c(4,3,2))
   svm_grid <- grid_regular(svm_params, levels = 10)
@@ -298,13 +353,13 @@ train_model <- function(df, species, response="Carbon_gm2") {
   mds_results <- nmds_rf(raw_model, training_df_one_spp, species)
   
   #plot for one species
-  # mdsplot <- ggplot(mds_df, aes(x = MDS1, y = MDS2, color = Carbon_gm2)) +
-  #   geom_point(size=4,alpha=0.8) +
-  #   scale_color_viridis_c(option="turbo",direction=1)+
-  #   theme_bw()+
-  #   labs(title=paste0(species))+
-  #   theme(legend.position="bottom")
-  # print(mdsplot)
+  mdsplot <- ggplot(mds_df, aes(x = NMDS1, y = NMDS2, color = Carbon_gm2)) +
+    geom_point(size=4,alpha=0.8) +
+    scale_color_viridis_c(option="turbo",direction=1)+
+    theme_bw()+
+    labs(title=paste0(species))+
+    theme(legend.position="bottom")
+  print(mdsplot)
   
   #extract
   finalized_model <- extract_fit_parsnip(final_fit)

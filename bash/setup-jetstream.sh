@@ -18,4 +18,4 @@ aws configure
 mkdir -p ~/landis/input ~/landis/output/
 
 #landis input files
-aws s3 sync s3://landis-ii-input/interior-AK-input ~/landis/input --endpoint-url "$S3_ENDPOINT_URL"
+#aws s3 sync s3://landis-ii-input/interior-AK-input ~/landis/input --endpoint-url "$S3_ENDPOINT_URL"
