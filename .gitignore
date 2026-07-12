@@ -16,7 +16,7 @@ writing/*.ai
 writing/*.pdf
 writing/*.pptx
 writing/figures/.DS_Store
+writing/figures/*.jpeg
 writing/*.xlsx
-docker/mozy/.DS_Store
-docker/mozy/secrets/
+docker/mozy/
 .DS_Store
